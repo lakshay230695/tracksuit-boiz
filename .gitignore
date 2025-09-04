@@ -1,0 +1,5 @@
+.envrc
+.direnv
+.vite
+node_modules
+**/tmp

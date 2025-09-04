@@ -1,3 +1,15 @@
+# Sentiment Analysis - Additional Bonus
+As a bonus, I have gone ahead and implemented a Google Gemini LLM based Sentiment Analysis onto the insights. :) 
+
+I implemented HuggingFace first, however it didn't work due to the model not being deployed and inaccessible. 
+
+Hence, implemented Gemini which is free and quick. 
+
+Additional instructions for that part: Add your own ENV to the GEMINI_API_KEY and you'll be able to see the badges on the frontend. 
+
+Please see the screenshot uploaded as "sentiment-analysis.png".
+ 
+
 # Take-Home Test (TypeScript)
 
 This is a template for a take-home test. See the [Instructions][Instructions]

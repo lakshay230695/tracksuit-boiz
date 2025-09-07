@@ -1,4 +1,3 @@
-// components/header/header.tsx
 import { useState } from "react";
 import { Button } from "../button/button.tsx";
 import styles from "./header.module.css";

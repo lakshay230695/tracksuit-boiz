@@ -39,8 +39,8 @@ export const AddInsight = ({ onCreated, ...modalProps }: AddInsightProps) => {
         return;
       }
 
-      form.reset();         // clear inputs
-      onCreated?.();        // let parent refresh list
+      form.reset(); // clear inputs
+      onCreated?.(); // let parent refresh list
       modalProps.onClose?.();
     } catch (err) {
       console.error("Failed to create insight", err);

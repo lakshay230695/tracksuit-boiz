@@ -185,4 +185,12 @@
   --easing-standard: cubic-bezier(0.4, 0, 0.2, 1);
   --easing-accelerate: cubic-bezier(0.4, 0, 1, 1);
   --easing-decelerate: cubic-bezier(0, 0, 0.2, 1);
+
+  /* Sentiment colors */
+  --sentiment-positive-fg: #17823b;
+  --sentiment-positive-bg: rgba(23,130,59,0.12);
+  --sentiment-neutral-fg:  #374151;
+  --sentiment-neutral-bg:  rgba(55,65,81,0.12);
+  --sentiment-negative-fg: #c62828;
+  --sentiment-negative-bg: rgba(198,40,40,0.12);
 }

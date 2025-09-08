@@ -43,3 +43,18 @@
   font: var(--text-lg);
   margin: var(--size-4) 0 0;
 }
+
+/* Base badge */
+.badge {
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+/* Semantic variants (no hexes here if you use design tokens) */
+.badgePositive { color: var(--sentiment-positive-fg); background: var(--sentiment-positive-bg); }
+.badgeNeutral  { color: var(--sentiment-neutral-fg);  background: var(--sentiment-neutral-bg); }
+.badgeNegative { color: var(--sentiment-negative-fg); background: var(--sentiment-negative-bg); }

@@ -4,24 +4,36 @@ import { cx } from "../../lib/cx.ts";
 import styles from "./insights.module.css";
 import type { Insight } from "../../schemas/insight.ts";
 
+/** Sentiment classes returned by the API. */
+enum SentimentLabel {
+  Positive = "positive",
+  Neutral = "neutral",
+  Negative = "negative",
+}
+
 type InsightsProps = {
   insights: Insight[];
   className?: string;
   onDeleted?: (id: number) => void;
 };
 
-type Sentiment = { label: "positive" | "neutral" | "negative"; score: number };
+type Sentiment = { label: SentimentLabel; score: number };
+
+const BADGE_CLASS: Record<SentimentLabel, string> = {
+  [SentimentLabel.Positive]: styles.badgePositive,
+  [SentimentLabel.Neutral]: styles.badgeNeutral,
+  [SentimentLabel.Negative]: styles.badgeNegative,
+};
 
 export const Insights = ({ insights, className, onDeleted }: InsightsProps) => {
   const [sentiments, setSentiments] = useState<Record<number, Sentiment>>({});
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const missing = insights.filter((i) => !sentiments[i.id]);
-      if (!missing.length) return;
+    const missing = insights.filter((i) => !sentiments[i.id]);
+    if (!missing.length) return;
 
-      await Promise.all(
+    (async () => {
+      const results = await Promise.all(
         missing.map(async (i) => {
           try {
             const res = await fetch("/api/sentiment", {
@@ -29,35 +41,53 @@ export const Insights = ({ insights, className, onDeleted }: InsightsProps) => {
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ text: i.text }),
             });
-            if (!res.ok) return;
-            const s: Sentiment = await res.json();
-            if (!cancelled) {
-              setSentiments((prev) => ({ ...prev, [i.id]: s }));
+            if (!res.ok) {
+              console.error(
+                "Sentiment API error",
+                res.status,
+                await res.text()
+              );
+              return null;
             }
-          } catch {
-            /* ignore */
+            const s = (await res.json()) as Sentiment;
+            return [i.id, s] as const;
+          } catch (err) {
+            console.error("Failed to analyze sentiment", err);
+            return null;
           }
-        }),
+        })
       );
+
+      // Commit all successful results in one state update (avoids races)
+      setSentiments((prev) => {
+        const next = { ...prev };
+        for (const item of results) {
+          if (!item) continue; // skip failed requests
+          const [id, s] = item;
+          if (!next[id]) next[id] = s;
+        }
+        return next;
+      });
     })();
-    return () => { cancelled = true; };
-  }, [insights]); // run when list changes
+    // Only rerun when the list of insights changes
+  }, [insights]);
 
   const deleteInsight = async (id: number) => {
-    const res = await fetch(`/api/insights/${id}`, { method: "DELETE" });
-    if (res.ok) onDeleted?.(id);
-    else console.error("Failed to delete insight", await res.text());
-  };
-
-  const badgeStyles = (label?: Sentiment["label"]) => {
-    if (label === "positive") {
-      return { color: "#17823b", background: "rgba(23,130,59,0.12)" };
+    try {
+      const res = await fetch(`/api/insights/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        console.error("Failed to delete insight", res.status, await res.text());
+        return;
+      }
+      onDeleted?.(id);
+      setSentiments((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+    } catch (err) {
+      console.error("Failed to delete insight", err);
     }
-    if (label === "negative") {
-      return { color: "#c62828", background: "rgba(198,40,40,0.12)" };
-    }
-    // neutral
-    return { color: "#374151", background: "rgba(55,65,81,0.12)" };
   };
 
   return (
@@ -67,29 +97,27 @@ export const Insights = ({ insights, className, onDeleted }: InsightsProps) => {
         {insights?.length ? (
           insights.map(({ id, text, createdAt, brand }) => {
             const s = sentiments[id];
-            const style = badgeStyles(s?.label);
             return (
               <div className={styles.insight} key={id}>
                 <div className={styles["insight-meta"]}>
                   <span>{brand}</span>
                   <div className={styles["insight-meta-details"]}>
-                    <span>{(createdAt instanceof Date ? createdAt : new Date(createdAt)).toLocaleString()}</span>
+                    <span>
+                      {(createdAt instanceof Date
+                        ? createdAt
+                        : new Date(createdAt)
+                      ).toLocaleString()}
+                    </span>
+
                     {s && (
                       <span
+                        className={cx(styles.badge, BADGE_CLASS[s.label])}
                         title={`${s.label} • ${(s.score * 100).toFixed(0)}%`}
-                        style={{
-                          marginLeft: 8,
-                          padding: "2px 8px",
-                          borderRadius: 999,
-                          fontSize: 12,
-                          fontWeight: 600,
-                          textTransform: "capitalize",
-                          ...style,
-                        }}
                       >
                         {s.label}
                       </span>
                     )}
+
                     <Trash2Icon
                       className={styles["insight-delete"]}
                       role="button"

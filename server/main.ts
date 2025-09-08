@@ -8,6 +8,7 @@ import lookupInsight from "./operations/lookup-insight.ts";
 import createInsight from "./operations/create-insight.ts";
 import deleteInsight from "./operations/delete-insight.ts";
 import analyzeSentiment from "./operations/analyse-sentiment.ts";
+import * as insightsTable from "$tables/insights.ts";
 
 console.log("Loading configuration");
 
@@ -22,15 +23,8 @@ console.log(`Opening SQLite database at ${dbFilePath}`);
 await Deno.mkdir(path.dirname(dbFilePath), { recursive: true });
 const db = new Database(dbFilePath);
 
-db.sql`
-  CREATE TABLE IF NOT EXISTS insights (
-    id INTEGER PRIMARY KEY ASC NOT NULL,
-    brand INTEGER NOT NULL,
-    createdAt TEXT NOT NULL,
-    text TEXT NOT NULL
-  )
-`;
-
+// Ensure the insights table exists
+db.prepare(insightsTable.createTable).run();
 console.log("Initialising server");
 
 const router = new oak.Router();

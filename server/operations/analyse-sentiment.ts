@@ -1,60 +1,87 @@
 // deno-lint-ignore-file no-explicit-any
+
+/** Allowed sentiment labels returned by the classifier. */
 export type SentimentLabel = "positive" | "neutral" | "negative";
+
 export type Sentiment = { label: SentimentLabel; score: number };
 
-const cache = new Map<string, Sentiment>();
+/** Simple in-memory cache keyed by the exact input text. */
+const CACHE = new Map<string, Sentiment>();
 
-const normalize = (raw: string): SentimentLabel => {
-  const l = String(raw || "").toLowerCase();
-  if (l.includes("pos")) return "positive";
-  if (l.includes("neu")) return "neutral";
-  if (l.includes("neg")) return "negative";
-  return (["positive", "neutral", "negative"] as const).includes(l as any)
-    ? (l as SentimentLabel)
-    : "neutral";
-};
+/** Constants for the Gemini call. */
+// env this model as it may change in future, no redeployment needed
+const GEMINI_MODEL = "gemini-1.5-flash";
+const GEMINI_URL = (key: string) =>
+  `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`;
 
-const clamp01 = (n: number) => Math.max(0, Math.min(1, Number(n)));
+/** Clamp a number to [0, 1]. */
+const clamp = (n: number) => Math.max(0, Math.min(1, Number(n)));
 
-function parseJsonish(raw: string): any {
-  const s = (raw ?? "").trim();
-  try { return JSON.parse(s); } catch {}
-  const unfenced = s.replace(/^\s*```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "");
-  try { return JSON.parse(unfenced); } catch {}
-  const m = s.match(/{[\s\S]*}/);
-  if (m) return JSON.parse(m[0]);
-  throw new Error(`Model did not return valid JSON: ${s.slice(0, 120)}…`);
+/** Convert a raw model label to our SentimentLabel. Defaults to "neutral". */
+function normalizeLabel(raw: unknown): SentimentLabel {
+  const s = String(raw ?? "").toLowerCase();
+  if (s.includes("pos")) return "positive";
+  if (s.includes("neu")) return "neutral";
+  if (s.includes("neg")) return "negative";
+  if (s === "positive" || s === "neutral" || s === "negative") return s;
+  return "neutral";
 }
 
+/**
+ * Parse text that should contain JSON, tolerating ```json fences.
+ * Returns the parsed value (or throws if nothing JSON-like is found).
+ */
+function parseJsonish(text: string): unknown {
+  const trimmed = (text ?? "").trim();
+  // 1) direct
+  try { return JSON.parse(trimmed); } catch {}
+  // 2) fenced ```json ... ```
+  const unfenced = trimmed
+    .replace(/^\s*```(?:json)?\s*/i, "")
+    .replace(/\s*```\s*$/i, "");
+  try { return JSON.parse(unfenced); } catch {}
+  // 3) first {...} block
+  const match = trimmed.match(/{[\s\S]*}/);
+  if (match) return JSON.parse(match[0]);
+  throw new Error(`Model did not return valid JSON: ${trimmed.slice(0, 120)}…`);
+}
+
+/**
+ * Classify sentiment (positive/neutral/negative) using Gemini.
+ * - Uses a tiny in-memory cache by text.
+ * - Requires GEMINI_API_KEY in the environment.
+ *
+ * @param text Freeform input to classify.
+ * @returns Normalized { label, score } where score ∈ [0,1]
+ */
 export default async function analyzeSentiment(text: string): Promise<Sentiment> {
-  const t = (text ?? "").trim();
-  if (!t) return { label: "neutral", score: 0.5 };
+  const input = (text ?? "").trim();
+  if (!input) return { label: "neutral", score: 0.5 };
 
-  const hit = cache.get(t);
-  if (hit) return hit;
+  // Cache hit
+  const cached = CACHE.get(input);
+  if (cached) return cached;
 
-  const apiKey = Deno.env.get("GEMINI_API_KEY") || Deno.env.get("GOOGLE_API_KEY");
-  if (!apiKey) throw new Error("No LLM available: set GEMINI_API_KEY or GOOGLE_API_KEY");
+  // API key
+  const apiKey = Deno.env.get("GEMINI_API_KEY");
+  if (!apiKey) {
+    throw new Error("No LLM available: set GEMINI_API_KEY in the env");
+  }
 
+  // Request body
   const body = {
     systemInstruction: {
       role: "system",
-      parts: [
-        {
-          text:
-            `You are a strict sentiment classifier. ` +
-            `Classify the sentiment as exactly one of: POSITIVE, NEUTRAL, NEGATIVE. ` +
-            `Respond ONLY with JSON like: {"label":"positive|neutral|negative","score":0..1} (no extra text). ` +
-            `The "score" is your confidence for the chosen label.`,
-        },
-      ],
+      parts: [{
+        text: [
+          "You are a strict sentiment classifier.",
+          "Classify the text as exactly one of: POSITIVE, NEUTRAL, NEGATIVE.",
+          "Respond ONLY with JSON: {\"label\":\"positive|neutral|negative\",\"score\":0..1}.",
+          "The \"score\" is your confidence for the chosen label.",
+        ].join(" "),
+      }],
     },
-    contents: [
-      {
-        role: "user",
-        parts: [{ text: t }],
-      },
-    ],
+    contents: [{ role: "user", parts: [{ text: input }] }],
     generationConfig: {
       response_mime_type: "application/json",
       temperature: 0,
@@ -62,30 +89,30 @@ export default async function analyzeSentiment(text: string): Promise<Sentiment>
     },
   };
 
-  const resp = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    },
-  );
+  // Call Gemini
+  const response = await fetch(GEMINI_URL(apiKey), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
 
-  if (!resp.ok) {
-    const txt = await resp.text();
-    console.warn("Gemini error:", resp.status, txt);
-    throw new Error(`Gemini error ${resp.status}`);
+  if (!response.ok) {
+    const errText = await response.text().catch(() => "");
+    console.warn("Gemini error:", response.status, errText);
+    throw new Error(`Gemini error ${response.status}`);
   }
 
-  const data = await resp.json();
-  const textOut = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}";
-  const parsed = parseJsonish(textOut);
+  const json = await response.json();
+  const modelText: string =
+    json?.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}";
+
+  const parsed = parseJsonish(modelText) as any;
 
   const result: Sentiment = {
-    label: normalize(parsed?.label),
-    score: clamp01(parsed?.score ?? 0.5),
+    label: normalizeLabel(parsed?.label),
+    score: clamp(parsed?.score ?? 0.5),
   };
 
-  cache.set(t, result);
+  CACHE.set(input, result);
   return result;
 }

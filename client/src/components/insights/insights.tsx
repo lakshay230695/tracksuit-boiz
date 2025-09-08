@@ -3,21 +3,20 @@ import { Trash2Icon } from "lucide-react";
 import { cx } from "../../lib/cx.ts";
 import styles from "./insights.module.css";
 import type { Insight } from "../../schemas/insight.ts";
-
 /** Sentiment classes returned by the API. */
-enum SentimentLabel {
+export enum SentimentLabel {
   Positive = "positive",
   Neutral = "neutral",
   Negative = "negative",
 }
+
+export type Sentiment = { label: SentimentLabel; score: number };
 
 type InsightsProps = {
   insights: Insight[];
   className?: string;
   onDeleted?: (id: number) => void;
 };
-
-type Sentiment = { label: SentimentLabel; score: number };
 
 const BADGE_CLASS: Record<SentimentLabel, string> = {
   [SentimentLabel.Positive]: styles.badgePositive,

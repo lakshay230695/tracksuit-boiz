@@ -94,9 +94,8 @@ describe("analyze-sentiment (no API key)", () => {
   let savedKey: string | undefined;
 
   beforeAll(() => {
-    savedKey = Deno.env.get("GEMINI_API_KEY") ?? Deno.env.get("GOOGLE_API_KEY") ?? undefined;
+    savedKey = Deno.env.get("GEMINI_API_KEY") ?? undefined;
     try { Deno.env.delete("GEMINI_API_KEY"); } catch {}
-    try { Deno.env.delete("GOOGLE_API_KEY"); } catch {}
   });
 
   afterAll(() => {

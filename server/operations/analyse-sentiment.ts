@@ -10,7 +10,7 @@ const CACHE = new Map<string, Sentiment>();
 
 /** Constants for the Gemini call. */
 // env this model as it may change in future, no redeployment needed
-const GEMINI_MODEL = "gemini-1.5-flash";
+const GEMINI_MODEL = "gemini-2.0-flash";
 const GEMINI_URL = (key: string) =>
   `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`;
 
